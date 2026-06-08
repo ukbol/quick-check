@@ -1,0 +1,14 @@
+{
+  "name": "UKBOL BOLD & DToL Species Lookup",
+  "short_name": "UKBOL Lookup",
+  "description": "Look up UK species coverage in BOLD and DToL, with synonym and fuzzy matching. Works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#1a4d5a",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
