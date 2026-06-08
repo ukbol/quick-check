@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Prebuild step for the BOLD/DToL Species Lookup.
 
-Reads the dated source TSV (e.g. ``2026_06_06_bold_dtol.txt``) and writes a
-compact ``data.json`` that the static ``index.html`` loads directly. The JSON
-keeps only the columns the page actually displays and stores rows as arrays
-(no repeated per-row keys), so it is both smaller and far faster for the
-browser's native ``JSON.parse`` than parsing the full TSV on the main thread.
+Reads the dated source TSV (e.g. ``2026_06_06_bold_dtol.txt``) and writes:
+
+  * ``data.json``      — a compact, columnar, dictionary-encoded payload that the
+                         worker streams, parses and indexes off the main thread.
+  * ``data.meta.json`` — a tiny manifest (version, byte size, row count) used for
+                         the download progress bar and service-worker cache
+                         invalidation.
+
+Only the columns the page displays are kept (the source's organism_key,
+taxon_version_key, kingdom, phylum_division and class are dropped). Low-cardinality
+columns are dictionary-encoded to integer indices, which shrinks the raw size and
+roughly halves browser parse/build time.
 
 Usage:
     python3 build.py [path/to/source.txt]
@@ -15,13 +22,13 @@ With no argument it auto-selects the newest ``*_bold_dtol.txt`` in this folder.
 
 import csv
 import glob
+import hashlib
 import json
 import os
 import sys
 from datetime import date
 
-# Columns the page renders, in display order. Anything else in the TSV
-# (organism_key, taxon_version_key, kingdom, phylum_division, class) is dropped.
+# Columns the page renders, in display order. Anything else in the TSV is dropped.
 FIELDS = [
     "order",
     "family",
@@ -35,8 +42,12 @@ FIELDS = [
     "dtol_status",
 ]
 
+# Columns with fewer than this fraction of distinct values are dictionary-encoded.
+DICT_CARDINALITY_RATIO = 0.3
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUTPUT = os.path.join(HERE, "data.json")
+DATA_OUT = os.path.join(HERE, "data.json")
+META_OUT = os.path.join(HERE, "data.meta.json")
 
 
 def pick_source(argv):
@@ -49,15 +60,11 @@ def pick_source(argv):
             "No source file found. Pass a path or place a *_bold_dtol.txt "
             "file next to build.py."
         )
-    # Newest by modification time (filenames are date-prefixed, but mtime is safe).
     return max(candidates, key=os.path.getmtime)
 
 
-def main():
-    source = pick_source(sys.argv)
-    if not os.path.isfile(source):
-        sys.exit(f"Source file not found: {source}")
-
+def read_rows(source):
+    """Return a list of per-row value lists (one entry per FIELDS column)."""
     # Source files have been seen as UTF-8 and as Windows-1252/Latin-1
     # (accented author names). Try UTF-8 first, fall back to cp1252.
     encoding = "utf-8"
@@ -78,26 +85,66 @@ def main():
             )
         for r in reader:
             rows.append([(r.get(f) or "").strip() for f in FIELDS])
+    return rows
 
-    payload = {
-        "meta": {
-            "source": os.path.basename(source),
-            "rows": len(rows),
-            "built": date.today().isoformat(),
-        },
-        "fields": FIELDS,
-        "rows": rows,
+
+def encode_columns(rows):
+    """Transpose to columns, dictionary-encoding low-cardinality fields.
+
+    Returns ``(dict_map, columns)`` where ``columns[i]`` is either a list of
+    strings (raw) or a list of ints (indices into ``dict_map[field]``).
+    """
+    n = len(rows)
+    dict_map = {}
+    columns = []
+    for i, field in enumerate(FIELDS):
+        col = [row[i] for row in rows]
+        distinct = set(col)
+        if n and len(distinct) < n * DICT_CARDINALITY_RATIO:
+            values = sorted(distinct)
+            lookup = {v: k for k, v in enumerate(values)}
+            dict_map[field] = values
+            columns.append([lookup[v] for v in col])
+        else:
+            columns.append(col)
+    return dict_map, columns
+
+
+def main():
+    source = pick_source(sys.argv)
+    if not os.path.isfile(source):
+        sys.exit(f"Source file not found: {source}")
+
+    raw_bytes = open(source, "rb").read()
+    version = hashlib.sha1(raw_bytes).hexdigest()[:12]
+
+    rows = read_rows(source)
+    dict_map, columns = encode_columns(rows)
+
+    meta = {
+        "source": os.path.basename(source),
+        "rows": len(rows),
+        "built": date.today().isoformat(),
+        "version": version,
     }
+    payload = {"meta": meta, "fields": FIELDS, "dict": dict_map, "columns": columns}
 
-    with open(OUTPUT, "w", encoding="utf-8") as out:
-        # Compact separators keep the file small; ensure_ascii=False keeps
-        # accented taxon names readable and a touch smaller.
+    with open(DATA_OUT, "w", encoding="utf-8") as out:
         json.dump(payload, out, ensure_ascii=False, separators=(",", ":"))
 
-    out_bytes = os.path.getsize(OUTPUT)
+    out_bytes = os.path.getsize(DATA_OUT)
+    # rawBytes lets the loader show an accurate progress bar (the streamed body is
+    # decompressed, so the gzip Content-Length can't give a percentage).
+    meta_file = dict(meta, rawBytes=out_bytes)
+    with open(META_OUT, "w", encoding="utf-8") as out:
+        json.dump(meta_file, out, ensure_ascii=False, separators=(",", ":"))
+
+    encoded = ", ".join(dict_map.keys())
     print(
         f"Built data.json from {os.path.basename(source)}: "
-        f"{len(rows):,} rows, {len(FIELDS)} fields, {out_bytes / 1_000_000:.1f} MB"
+        f"{len(rows):,} rows, {len(FIELDS)} fields, {out_bytes / 1_000_000:.1f} MB "
+        f"(version {version})\n"
+        f"  dictionary-encoded: {encoded}"
     )
 
 
