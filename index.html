@@ -3,185 +3,111 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UKBOL and DTOL Species Lookup</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <title>BOLD &amp; DToL Species Lookup — UKBOL</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    /* ── Config ────────────────────────────────────────────── */
-    :root {
-      --bg:      #0d1b2a;
-      --panel:   #0f2035;
-      --border:  #1e3a5a;
-      --accent:  #2e6dab;
-      --accent2: #e07b54;
-      --text:    #c8ddf0;
-      --dim:     #5a85a8;
-      --green:   #7ab896;
-      --mono:    'IBM Plex Mono', 'Courier New', monospace;
+    :root{
+      --ukbol-primary:#1a4d5a;--ukbol-primary-mid:#2b7a8c;--ukbol-accent-light:#6ab8c8;
+      --ukbol-gold:#d4a017;--ukbol-text:#343a40;--ukbol-bg:#f5f7fa;
+      --ukbol-green:#198754;--ukbol-amber:#ffc107;--ukbol-orange:#fd7e14;
+      --ukbol-red:#dc3545;--ukbol-blue:#0d6efd;--ukbol-black:#343a40;
     }
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--ukbol-bg);color:var(--ukbol-text);}
+    a{color:var(--ukbol-primary-mid);}a:hover{color:var(--ukbol-primary);}
+    h1,h2{color:var(--ukbol-primary);}h3,h5{color:var(--ukbol-primary-mid);}
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── Nav (matches ukbol.org) ─────────────────────────────── */
+    .site-nav{background:#fff;border-bottom:2px solid #e8f4f8;box-shadow:0 1px 4px rgba(0,0,0,.07);padding:.5rem 0;}
+    .site-nav .navbar-brand{display:inline-flex;align-items:center;gap:.6rem;}
+    .site-nav .navbar-brand img{height:45px;}
+    .site-nav .brand-fallback{font-weight:800;letter-spacing:1px;font-size:1.4rem;color:var(--ukbol-primary);}
+    .site-nav .brand-fallback span{color:var(--ukbol-gold);}
+    .site-nav .dataset-name{font-weight:700;color:var(--ukbol-primary);}
+    .site-nav .dataset-meta{color:#6c757d;font-size:.85rem;}
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--mono);
-      min-height: 100vh;
-      padding: 36px 20px 60px;
-    }
+    /* ── Cards / panels ──────────────────────────────────────── */
+    .panel{background:#fff;border-radius:12px;padding:1.25rem;box-shadow:0 2px 12px rgba(0,0,0,.08);margin-bottom:1.5rem;}
+    .panel h5{margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #e9ecef;}
 
-    .container { max-width: 740px; margin: 0 auto; }
+    .eyebrow{font-size:.7rem;letter-spacing:3px;color:var(--ukbol-primary-mid);text-transform:uppercase;}
 
-    /* ── Header ─────────────────────────────────────────────── */
-    .eyebrow {
-      font-size: 10px;
-      letter-spacing: 4px;
-      color: var(--accent);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    h1 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #d4e8ff;
-      letter-spacing: 1px;
-      margin-bottom: 4px;
-    }
-    .subtitle {
-      font-size: 12px;
-      color: var(--dim);
-      margin-bottom: 28px;
-    }
+    /* ── Status bar ──────────────────────────────────────────── */
+    #status-bar{font-size:.9rem;padding:.6rem .9rem;border-radius:8px;border:1px solid #e9ecef;background:#fff;margin-bottom:1.25rem;display:flex;align-items:center;gap:.5rem;}
+    #status-bar.ok{color:var(--ukbol-green);border-color:#badbcc;background:#f1f9f4;}
+    #status-bar.err{color:var(--ukbol-red);border-color:#f5c2c7;background:#fdf3f4;}
+    #status-bar.loading{color:#6c757d;}
+    .spinner{width:14px;height:14px;border:2px solid #e9ecef;border-top-color:var(--ukbol-primary-mid);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+    @keyframes spin{to{transform:rotate(360deg);}}
 
-    /* ── Status bar ─────────────────────────────────────────── */
-    #status-bar {
-      font-size: 12px;
-      padding: 8px 14px;
-      border-radius: 5px;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    #status-bar.ok    { color: var(--green); border-color: #2a5a3a; }
-    #status-bar.err   { color: var(--accent2); border-color: #5a2a1a; }
-    #status-bar.loading { color: var(--dim); }
-
-    .spinner {
-      width: 12px; height: 12px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      flex-shrink: 0;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Query area ─────────────────────────────────────────── */
-    .query-label {
-      font-size: 10px;
-      letter-spacing: 3px;
-      color: var(--dim);
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-    textarea {
-      width: 100%;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 13px;
-      padding: 10px 12px;
-      resize: vertical;
-      outline: none;
-      transition: border-color 0.2s;
-      min-height: 110px;
-    }
-    textarea:focus { border-color: var(--accent); }
-    textarea::placeholder { color: #2a4a68; }
-
-    .hint { font-size: 11px; color: #2a4a68; margin-top: 4px; margin-bottom: 14px; }
-
-    button#search-btn {
-      background: var(--accent);
-      color: #d4e8ff;
-      border: none;
-      border-radius: 6px;
-      padding: 10px 28px;
-      font-size: 13px;
-      font-family: var(--mono);
-      letter-spacing: 2px;
-      cursor: pointer;
-      transition: background 0.15s;
-      text-transform: uppercase;
-      margin-bottom: 36px;
-    }
-    button#search-btn:hover   { background: #3a85cc; }
-    button#search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    textarea{font-family:'IBM Plex Mono','Courier New',monospace;font-size:14px;}
+    .hint{font-size:.8rem;color:#6c757d;}
 
     /* ── Results ─────────────────────────────────────────────── */
-    #results { border-top: 1px solid var(--border); padding-top: 28px; }
+    .result-block{margin-bottom:1.25rem;padding:1rem 1.1rem;border-radius:10px;border:1px solid #e9ecef;border-left:4px solid var(--ukbol-primary-mid);background:#fff;}
+    .result-block.no-match{border-left-color:#ced4da;}
+    .result-name{font-size:1.05rem;font-weight:700;color:var(--ukbol-primary);margin-bottom:.4rem;font-style:italic;}
+    .priority{font-size:.9rem;font-weight:600;margin-bottom:.6rem;}
+    .priority.required{color:var(--ukbol-orange);}
+    .priority.none{color:var(--ukbol-green);}
+    .matched-via{font-size:.78rem;color:#6c757d;font-weight:400;font-style:normal;}
 
-    .result-block {
-      margin-bottom: 32px;
-      border-left: 3px solid var(--accent);
-      padding-left: 16px;
-    }
-    .result-block.no-match { border-left-color: #3a3a3a; }
+    .field-row{display:flex;gap:.75rem;margin-bottom:.15rem;font-size:.9rem;line-height:1.55;}
+    .field-label{color:#6c757d;min-width:160px;flex-shrink:0;}
+    .field-value{color:var(--ukbol-text);}
 
-    .result-name {
-      font-size: 15px;
-      font-weight: 700;
-      color: #d4e8ff;
-      margin-bottom: 6px;
-    }
-    .priority {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 10px;
-    }
-    .priority.required { color: var(--accent2); }
-    .priority.none     { color: var(--green); }
+    .status-badge{display:inline-block;padding:.2em .55em;font-size:.72rem;font-weight:600;border-radius:5px;color:#fff;white-space:nowrap;vertical-align:middle;}
+    .status-GREEN{background:var(--ukbol-green);}.status-AMBER{background:var(--ukbol-amber);color:#000;}
+    .status-ORANGE{background:var(--ukbol-orange);}.status-RED{background:var(--ukbol-red);}
+    .status-BLUE{background:var(--ukbol-blue);}.status-BLACK{background:var(--ukbol-black);}
+    .bags-badge{display:inline-block;padding:.2em .55em;font-size:.72rem;font-weight:700;border-radius:5px;color:#fff;}
+    .bags-A{background:#198754;}.bags-B{background:#2e9e6b;}.bags-C{background:#0d6efd;}
+    .bags-D{background:#7ecba3;}.bags-E{background:#dc3545;}.bags-F{background:#343a40;}
 
-    .field-row {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 2px;
-      font-size: 13px;
-      line-height: 1.55;
-    }
-    .field-label {
-      color: var(--dim);
-      min-width: 170px;
-      flex-shrink: 0;
-    }
-    .field-value { color: var(--text); }
-
-    .no-match-msg { color: var(--accent2); font-size: 13px; }
-    .no-match-msg span { opacity: 0.5; }
+    /* ── Fuzzy suggestions ───────────────────────────────────── */
+    .no-match-msg{color:#6c757d;font-size:.9rem;margin-bottom:.5rem;}
+    .suggest-label{font-size:.85rem;font-weight:600;color:var(--ukbol-primary-mid);margin-bottom:.4rem;}
+    .suggest-list{display:flex;flex-wrap:wrap;gap:.4rem;}
+    .suggest-btn{font-family:inherit;font-style:italic;font-size:.85rem;background:#eef6f8;border:1px solid #cfe6ec;color:var(--ukbol-primary);padding:.25rem .65rem;border-radius:20px;cursor:pointer;transition:background .12s,border-color .12s;}
+    .suggest-btn:hover{background:var(--ukbol-accent-light);border-color:var(--ukbol-primary-mid);color:#fff;}
+    .suggest-btn .dist{font-style:normal;opacity:.6;font-size:.75rem;margin-left:.3rem;}
+    .suggest-detail{margin-top:.75rem;padding-top:.6rem;border-top:1px dashed #e0e6ea;}
   </style>
 </head>
 <body>
-<div class="container">
 
-  <div class="eyebrow">UKBOL · DToL</div>
-  <h1>BOLD and DTOL Species Lookup</h1>
-  <p class="subtitle" id="file-label">Loading dataset…</p>
+<nav class="site-nav">
+  <div class="container-fluid px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <a class="navbar-brand" href="https://ukbol.org/">
+      <img src="assets/images/ukbol-text-logo-clear.png" alt="UKBOL"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='inline';">
+      <span class="brand-fallback" style="display:none">UK<span>BOL</span></span>
+    </a>
+    <div class="text-end">
+      <span class="dataset-name">BOLD &amp; DToL Species Lookup</span>
+      <div class="dataset-meta" id="dataset-meta">Loading dataset…</div>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4" style="max-width:920px;">
 
   <div id="status-bar" class="loading">
     <div class="spinner" id="spinner"></div>
-    <span id="status-text">Fetching data file…</span>
+    <span id="status-text">Fetching data…</span>
   </div>
 
-  <div class="query-label">Species names — one per line</div>
-  <textarea id="query-input"
-    placeholder="Aaptos simplex&#10;Dytiscus marginalis&#10;Calopteryx splendens"
-    disabled></textarea>
-  <div class="hint">Ctrl + Enter to search</div>
-  <button id="search-btn" disabled>Search</button>
+  <div class="panel">
+    <div class="eyebrow mb-1">UKBOL · DToL</div>
+    <h5 class="border-0 pb-0">Look up species coverage</h5>
+    <label class="form-label fw-bold mb-1" for="query-input">Species names — one per line</label>
+    <textarea id="query-input" class="form-control mb-2" rows="5"
+      placeholder="Aaptos simplex&#10;Dytiscus marginalis&#10;Calopteryx splendens"
+      disabled></textarea>
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span class="hint">Tip: Ctrl + Enter to search. Synonyms and close (fuzzy) matches are found automatically.</span>
+      <button id="search-btn" class="btn btn-primary px-4" disabled style="background:var(--ukbol-primary);border-color:var(--ukbol-primary);">Search</button>
+    </div>
+  </div>
 
   <div id="results"></div>
 
@@ -189,72 +115,152 @@
 
 <script>
   // ── CONFIGURATION ──────────────────────────────────────────────
-  // Update DATA_FILE to match the TSV filename in this repo.
-  const DATA_FILE = "2026_06_06_bold_dtol.txt";
+  // data.json is produced from the dated source TSV by build.py.
+  const DATA_FILE = "data.json";
   // ──────────────────────────────────────────────────────────────
 
   const FIELDS = [
     { key: "order",               label: "Order" },
     { key: "family",              label: "Family" },
-    { key: "taxon_name",          label: "Taxon Name" },
+    { key: "taxon_name",          label: "Taxon Name", italic: true },
     { key: "synonyms",            label: "Synonyms" },
     { key: "BOLD_number_records", label: "BOLD Number Records" },
     { key: "BOLD_gb_records",     label: "BOLD GB Records" },
-    { key: "bags_grade",          label: "BAGS Grade" },
-    { key: "species_status",      label: "Species Status" },
+    { key: "bags_grade",          label: "BAGS Grade", badge: "bags" },
+    { key: "species_status",      label: "Species Status", badge: "status" },
     { key: "BOLD_other_names",    label: "BOLD Other Names" },
     { key: "dtol_status",         label: "DToL Status" },
   ];
 
-  let dataset = null;
+  let dataset = [];        // array of row objects
+  const exactIndex = new Map();  // lowercased name (taxon_name + synonyms) -> row
+  let searchList = [];     // precomputed fuzzy-search entries
 
-  // ── Load TSV ───────────────────────────────────────────────────
   function setStatus(type, msg) {
     const bar = document.getElementById("status-bar");
-    const txt = document.getElementById("status-text");
-    const spin = document.getElementById("spinner");
     bar.className = type;
-    txt.textContent = msg;
-    spin.style.display = type === "loading" ? "block" : "none";
+    document.getElementById("status-text").textContent = msg;
+    document.getElementById("spinner").style.display = type === "loading" ? "block" : "none";
   }
 
-  Papa.parse(DATA_FILE, {
-    download: true,
-    header: true,
-    delimiter: "\t",
-    skipEmptyLines: true,
-    complete: (res) => {
-      dataset = res.data;
+  // ── Load compact JSON ──────────────────────────────────────────
+  fetch(DATA_FILE)
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then(data => {
+      const fields = data.fields;
+      dataset = data.rows.map((arr, id) => {
+        const row = { _id: id };
+        fields.forEach((f, i) => { row[f] = arr[i]; });
+        return row;
+      });
+      buildIndexes();
+
       const n = dataset.length.toLocaleString();
-      document.getElementById("file-label").textContent =
-        `Dataset: ${DATA_FILE}`;
-      setStatus("ok", `✓ Loaded ${n} rows`);
+      const meta = data.meta || {};
+      document.getElementById("dataset-meta").textContent =
+        `${n} species` + (meta.source ? ` · ${meta.source}` : "") +
+        (meta.built ? ` · built ${meta.built}` : "");
+      setStatus("ok", `✓ Loaded ${n} species`);
       document.getElementById("query-input").disabled = false;
       document.getElementById("search-btn").disabled = false;
-    },
-    error: (err) => {
-      setStatus("err", `✗ Failed to load ${DATA_FILE} — is the file in the repo?`);
-      document.getElementById("file-label").textContent = DATA_FILE;
+    })
+    .catch(err => {
+      setStatus("err", `✗ Failed to load ${DATA_FILE} — run build.py and commit it. (${err.message})`);
+      document.getElementById("dataset-meta").textContent = DATA_FILE;
       console.error(err);
-    }
-  });
+    });
 
-  // ── Search logic ───────────────────────────────────────────────
+  function norm(s) {
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function buildIndexes() {
+    for (const row of dataset) {
+      const name = norm(row.taxon_name);
+      if (name && !exactIndex.has(name)) exactIndex.set(name, row);
+      (row.synonyms || "").split(";").forEach(s => {
+        const sn = norm(s);
+        if (sn && !exactIndex.has(sn)) exactIndex.set(sn, row);
+      });
+      // Fuzzy entry uses the canonical taxon name.
+      if (name) {
+        const parts = name.split(" ");
+        searchList.push({
+          row,
+          name,
+          len: name.length,
+          genus: parts[0] || "",
+          epithet: parts[1] || "",
+        });
+      }
+    }
+  }
+
+  // ── Exact lookup (O(1)) ────────────────────────────────────────
   function findRow(query) {
-    const q = query.trim().toLowerCase();
-    if (!q) return null;
-    return dataset.find(row => {
-      if ((row.taxon_name || "").trim().toLowerCase() === q) return true;
-      return (row.synonyms || "")
-        .split(";")
-        .some(s => s.trim().toLowerCase() === q);
-    }) || null;
+    const q = norm(query);
+    return q ? (exactIndex.get(q) || null) : null;
+  }
+
+  // ── Fuzzy fallback ─────────────────────────────────────────────
+  // Bounded Levenshtein: returns distance, or maxDist+1 if it exceeds maxDist.
+  function boundedLev(a, b, maxDist) {
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > maxDist) return maxDist + 1;
+    let prev = new Array(lb + 1);
+    let curr = new Array(lb + 1);
+    for (let j = 0; j <= lb; j++) prev[j] = j;
+    for (let i = 1; i <= la; i++) {
+      curr[0] = i;
+      let rowMin = curr[0];
+      const ca = a.charCodeAt(i - 1);
+      for (let j = 1; j <= lb; j++) {
+        const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+        curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+        if (curr[j] < rowMin) rowMin = curr[j];
+      }
+      if (rowMin > maxDist) return maxDist + 1;  // whole row exceeds bound → bail
+      [prev, curr] = [curr, prev];
+    }
+    return prev[lb];
+  }
+
+  function fuzzyMatches(query) {
+    const q = norm(query);
+    if (!q) return [];
+    const qLen = q.length;
+    const qParts = q.split(" ");
+    const qGenus = qParts[0] || "";
+    const qEpithet = qParts[1] || "";
+    const maxDist = qLen <= 5 ? 1 : qLen <= 10 ? 2 : 3;
+
+    const seen = new Set();
+    const cands = [];
+    for (const e of searchList) {
+      const epithetMatch = qEpithet && e.epithet === qEpithet && e.genus !== qGenus;
+      let dist = maxDist + 1;
+      if (Math.abs(e.len - qLen) <= maxDist) dist = boundedLev(q, e.name, maxDist);
+      if (dist <= maxDist || epithetMatch) {
+        if (seen.has(e.name)) continue;
+        seen.add(e.name);
+        // dist=null means "epithet-only" match (no close edit distance).
+        cands.push({ row: e.row, name: e.row.taxon_name, dist: dist <= maxDist ? dist : null, epithetMatch });
+      }
+    }
+    cands.sort((a, b) => {
+      const da = a.dist === null ? Number.MAX_SAFE_INTEGER : a.dist;
+      const db = b.dist === null ? Number.MAX_SAFE_INTEGER : b.dist;
+      if (da !== db) return da - db;
+      if (a.epithetMatch !== b.epithetMatch) return a.epithetMatch ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return cands.slice(0, 8);
   }
 
   function getPriority(row) {
     const flags = [];
-    if ((row.species_status || "").trim() === "BLACK")        flags.push("UKBOL");
-    if ((row.dtol_status   || "").trim() === "Not in DToL")  flags.push("DToL");
+    if (norm(row.species_status) === "black")        flags.push("UKBOL");
+    if (norm(row.dtol_status)   === "not in dtol")   flags.push("DToL");
     return flags.length ? `Needed for ${flags.join(" and ")}` : null;
   }
 
@@ -264,6 +270,34 @@
   }
 
   // ── Render ─────────────────────────────────────────────────────
+  function badgeHtml(kind, raw) {
+    const v = (raw || "").trim();
+    if (!v) return '<span class="field-value">N/A</span>';
+    if (kind === "status") {
+      const cls = /^(GREEN|AMBER|ORANGE|RED|BLUE|BLACK)$/i.test(v) ? "status-" + v.toUpperCase() : "";
+      return `<span class="status-badge ${cls}">${escHtml(v)}</span>`;
+    }
+    if (kind === "bags") {
+      const cls = /^[A-F]$/i.test(v) ? "bags-" + v.toUpperCase() : "";
+      return `<span class="bags-badge ${cls}">${escHtml(v)}</span>`;
+    }
+    return `<span class="field-value">${escHtml(v)}</span>`;
+  }
+
+  function recordHtml(row) {
+    const priority = getPriority(row);
+    const prioHtml = priority
+      ? `<div class="priority required">Priority: ${escHtml(priority)}</div>`
+      : `<div class="priority none">Priority: No current requirement</div>`;
+    const fieldsHtml = FIELDS.map(f => {
+      const valueHtml = f.badge
+        ? badgeHtml(f.badge, row[f.key])
+        : `<span class="field-value"${f.italic ? ' style="font-style:italic"' : ''}>${escHtml(val(row, f.key))}</span>`;
+      return `<div class="field-row"><span class="field-label">${escHtml(f.label)}:</span>${valueHtml}</div>`;
+    }).join("");
+    return prioHtml + fieldsHtml;
+  }
+
   function renderResults(pairs) {
     const container = document.getElementById("results");
     container.innerHTML = "";
@@ -272,39 +306,49 @@
       const block = document.createElement("div");
       block.className = "result-block" + (row ? "" : " no-match");
 
-      if (!row) {
-        block.innerHTML = `
-          <div class="result-name">${escHtml(query)}</div>
-          <div class="no-match-msg"><span>✗ </span>No match found for '<strong>${escHtml(query)}</strong>' in the dataset.</div>`;
+      if (row) {
+        block.innerHTML = `<div class="result-name">${escHtml(query)}</div>${recordHtml(row)}`;
       } else {
-        const priority = getPriority(row);
-        const prioHtml = priority
-          ? `<div class="priority required">Priority: ${escHtml(priority)}</div>`
-          : `<div class="priority none">Priority: No current requirement</div>`;
-
-        const fieldsHtml = FIELDS.map(f => `
-          <div class="field-row">
-            <span class="field-label">${escHtml(f.label)}:</span>
-            <span class="field-value">${escHtml(val(row, f.key))}</span>
-          </div>`).join("");
-
-        block.innerHTML = `
-          <div class="result-name">${escHtml(query)}</div>
-          ${prioHtml}
-          ${fieldsHtml}`;
+        const suggestions = fuzzyMatches(query);
+        let html = `<div class="result-name">${escHtml(query)}</div>
+          <div class="no-match-msg">✗ No exact match for '<strong>${escHtml(query)}</strong>'.</div>`;
+        if (suggestions.length) {
+          const chips = suggestions.map(s => {
+            const tag = s.dist === null ? "same epithet"
+              : (s.dist === 0 ? "" : `~${s.dist}`);
+            return `<button type="button" class="suggest-btn" data-row-id="${s.row._id}">${escHtml(s.name)}${tag ? `<span class="dist">${escHtml(tag)}</span>` : ""}</button>`;
+          }).join("");
+          html += `<div class="suggest-label">Did you mean? <span class="matched-via">(approximate matches — click to view)</span></div>
+            <div class="suggest-list">${chips}</div>
+            <div class="suggest-detail" style="display:none"></div>`;
+        } else {
+          html += `<div class="no-match-msg">No close matches found in the dataset.</div>`;
+        }
+        block.innerHTML = html;
       }
-
       container.appendChild(block);
     });
   }
 
+  // Expand a suggestion's full record inline (event delegation).
+  document.getElementById("results").addEventListener("click", e => {
+    const btn = e.target.closest(".suggest-btn");
+    if (!btn) return;
+    const row = dataset[Number(btn.dataset.rowId)];
+    if (!row) return;
+    const detail = btn.closest(".result-block").querySelector(".suggest-detail");
+    detail.style.display = "block";
+    detail.innerHTML =
+      `<div class="result-name" style="font-size:.95rem">${escHtml(row.taxon_name)}
+        <span class="matched-via">— approximate match</span></div>` + recordHtml(row);
+  });
+
   function doSearch() {
-    if (!dataset) return;
+    if (!dataset.length) return;
     const queries = document.getElementById("query-input")
       .value.split("\n").map(q => q.trim()).filter(Boolean);
     if (!queries.length) return;
-    const pairs = queries.map(q => ({ query: q, row: findRow(q) }));
-    renderResults(pairs);
+    renderResults(queries.map(q => ({ query: q, row: findRow(q) })));
   }
 
   // ── Events ─────────────────────────────────────────────────────
@@ -316,10 +360,8 @@
   // ── Utility ────────────────────────────────────────────────────
   function escHtml(str) {
     return String(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 </script>
 </body>
