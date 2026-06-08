@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UKBOL and DTOL Species Lookup</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    /* ── Config ────────────────────────────────────────────── */
+    :root {
+      --bg:      #0d1b2a;
+      --panel:   #0f2035;
+      --border:  #1e3a5a;
+      --accent:  #2e6dab;
+      --accent2: #e07b54;
+      --text:    #c8ddf0;
+      --dim:     #5a85a8;
+      --green:   #7ab896;
+      --mono:    'IBM Plex Mono', 'Courier New', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      padding: 36px 20px 60px;
+    }
+
+    .container { max-width: 740px; margin: 0 auto; }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .eyebrow {
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #d4e8ff;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: var(--dim);
+      margin-bottom: 28px;
+    }
+
+    /* ── Status bar ─────────────────────────────────────────── */
+    #status-bar {
+      font-size: 12px;
+      padding: 8px 14px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #status-bar.ok    { color: var(--green); border-color: #2a5a3a; }
+    #status-bar.err   { color: var(--accent2); border-color: #5a2a1a; }
+    #status-bar.loading { color: var(--dim); }
+
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Query area ─────────────────────────────────────────── */
+    .query-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--dim);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    textarea {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 10px 12px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+      min-height: 110px;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: #2a4a68; }
+
+    .hint { font-size: 11px; color: #2a4a68; margin-top: 4px; margin-bottom: 14px; }
+
+    button#search-btn {
+      background: var(--accent);
+      color: #d4e8ff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 28px;
+      font-size: 13px;
+      font-family: var(--mono);
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.15s;
+      text-transform: uppercase;
+      margin-bottom: 36px;
+    }
+    button#search-btn:hover   { background: #3a85cc; }
+    button#search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Results ─────────────────────────────────────────────── */
+    #results { border-top: 1px solid var(--border); padding-top: 28px; }
+
+    .result-block {
+      margin-bottom: 32px;
+      border-left: 3px solid var(--accent);
+      padding-left: 16px;
+    }
+    .result-block.no-match { border-left-color: #3a3a3a; }
+
+    .result-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #d4e8ff;
+      margin-bottom: 6px;
+    }
+    .priority {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .priority.required { color: var(--accent2); }
+    .priority.none     { color: var(--green); }
+
+    .field-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 2px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .field-label {
+      color: var(--dim);
+      min-width: 170px;
+      flex-shrink: 0;
+    }
+    .field-value { color: var(--text); }
+
+    .no-match-msg { color: var(--accent2); font-size: 13px; }
+    .no-match-msg span { opacity: 0.5; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="eyebrow">UKBOL · DToL</div>
+  <h1>BOLD Species Lookup</h1>
+  <p class="subtitle" id="file-label">Loading dataset…</p>
+
+  <div id="status-bar" class="loading">
+    <div class="spinner" id="spinner"></div>
+    <span id="status-text">Fetching data file…</span>
+  </div>
+
+  <div class="query-label">Species names — one per line</div>
+  <textarea id="query-input"
+    placeholder="Aaptos simplex&#10;Dytiscus marginalis&#10;Calopteryx splendens"
+    disabled></textarea>
+  <div class="hint">Ctrl + Enter to search</div>
+  <button id="search-btn" disabled>Search</button>
+
+  <div id="results"></div>
+
+</div>
+
+<script>
+  // ── CONFIGURATION ──────────────────────────────────────────────
+  // Update DATA_FILE to match the TSV filename in this repo.
+  const DATA_FILE = "2026_06_06_bold_dtol.txt";
+  // ──────────────────────────────────────────────────────────────
+
+  const FIELDS = [
+    { key: "order",               label: "Order" },
+    { key: "family",              label: "Family" },
+    { key: "taxon_name",          label: "Taxon Name" },
+    { key: "synonyms",            label: "Synonyms" },
+    { key: "BOLD_number_records", label: "BOLD Number Records" },
+    { key: "BOLD_gb_records",     label: "BOLD GB Records" },
+    { key: "bags_grade",          label: "BAGS Grade" },
+    { key: "species_status",      label: "Species Status" },
+    { key: "BOLD_other_names",    label: "BOLD Other Names" },
+    { key: "dtol_status",         label: "DToL Status" },
+  ];
+
+  let dataset = null;
+
+  // ── Load TSV ───────────────────────────────────────────────────
+  function setStatus(type, msg) {
+    const bar = document.getElementById("status-bar");
+    const txt = document.getElementById("status-text");
+    const spin = document.getElementById("spinner");
+    bar.className = type;
+    txt.textContent = msg;
+    spin.style.display = type === "loading" ? "block" : "none";
+  }
+
+  Papa.parse(DATA_FILE, {
+    download: true,
+    header: true,
+    delimiter: "\t",
+    skipEmptyLines: true,
+    complete: (res) => {
+      dataset = res.data;
+      const n = dataset.length.toLocaleString();
+      document.getElementById("file-label").textContent =
+        `Dataset: ${DATA_FILE}`;
+      setStatus("ok", `✓ Loaded ${n} rows`);
+      document.getElementById("query-input").disabled = false;
+      document.getElementById("search-btn").disabled = false;
+    },
+    error: (err) => {
+      setStatus("err", `✗ Failed to load ${DATA_FILE} — is the file in the repo?`);
+      document.getElementById("file-label").textContent = DATA_FILE;
+      console.error(err);
+    }
+  });
+
+  // ── Search logic ───────────────────────────────────────────────
+  function findRow(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return dataset.find(row => {
+      if ((row.taxon_name || "").trim().toLowerCase() === q) return true;
+      return (row.synonyms || "")
+        .split(";")
+        .some(s => s.trim().toLowerCase() === q);
+    }) || null;
+  }
+
+  function getPriority(row) {
+    const flags = [];
+    if ((row.species_status || "").trim() === "BLACK")        flags.push("UKBOL");
+    if ((row.dtol_status   || "").trim() === "Not in DToL")  flags.push("DToL");
+    return flags.length ? `Needed for ${flags.join(" and ")}` : null;
+  }
+
+  function val(row, key) {
+    const v = (row[key] || "").trim();
+    return v === "" ? "N/A" : v;
+  }
+
+  // ── Render ─────────────────────────────────────────────────────
+  function renderResults(pairs) {
+    const container = document.getElementById("results");
+    container.innerHTML = "";
+
+    pairs.forEach(({ query, row }) => {
+      const block = document.createElement("div");
+      block.className = "result-block" + (row ? "" : " no-match");
+
+      if (!row) {
+        block.innerHTML = `
+          <div class="result-name">${escHtml(query)}</div>
+          <div class="no-match-msg"><span>✗ </span>No match found for '<strong>${escHtml(query)}</strong>' in the dataset.</div>`;
+      } else {
+        const priority = getPriority(row);
+        const prioHtml = priority
+          ? `<div class="priority required">Priority: ${escHtml(priority)}</div>`
+          : `<div class="priority none">Priority: No current requirement</div>`;
+
+        const fieldsHtml = FIELDS.map(f => `
+          <div class="field-row">
+            <span class="field-label">${escHtml(f.label)}:</span>
+            <span class="field-value">${escHtml(val(row, f.key))}</span>
+          </div>`).join("");
+
+        block.innerHTML = `
+          <div class="result-name">${escHtml(query)}</div>
+          ${prioHtml}
+          ${fieldsHtml}`;
+      }
+
+      container.appendChild(block);
+    });
+  }
+
+  function doSearch() {
+    if (!dataset) return;
+    const queries = document.getElementById("query-input")
+      .value.split("\n").map(q => q.trim()).filter(Boolean);
+    if (!queries.length) return;
+    const pairs = queries.map(q => ({ query: q, row: findRow(q) }));
+    renderResults(pairs);
+  }
+
+  // ── Events ─────────────────────────────────────────────────────
+  document.getElementById("search-btn").addEventListener("click", doSearch);
+  document.getElementById("query-input").addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.ctrlKey) doSearch();
+  });
+
+  // ── Utility ────────────────────────────────────────────────────
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+</script>
+</body>
+</html>
